@@ -1,6 +1,6 @@
 // This is an auto-generated header-only single-file distribution of libcluon.
-// Date: Sun, 01 Apr 2018 15:22:27 +0200
-// Version: 0.0.58
+// Date: Sun, 01 Apr 2018 15:58:07 +0200
+// Version: 0.0.59
 //
 //
 // Implementation of N4562 std::experimental::any (merged into C++17) for C++11 compilers.
@@ -13242,7 +13242,7 @@ int main(int argc, char **argv) {
 
                     cluon::MessageParser mp;
                     auto parsingResult = mp.parse(s);
-                    if (cluon::MessageParser::MessageParserErrorCodes::NO_ERROR == parsingResult.second) {
+                    if (!parsingResult.first.empty()) {
                         for (const auto &mm : parsingResult.first) { scopeOfMetaMessages[mm.messageIdentifier()] = mm; }
                         std::clog << "Parsed " << parsingResult.first.size() << " message(s)." << std::endl;
                     }
