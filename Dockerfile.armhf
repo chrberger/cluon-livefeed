@@ -1,4 +1,4 @@
-# Copyright (C) 2018  Christian Berger
+# Copyright (C) 2019  Christian Berger
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -28,7 +28,7 @@ RUN apk update && \
         g++
 ADD . /opt/sources
 WORKDIR /opt/sources
-RUN ln -sf cluon-complete-v0.0.104.hpp cluon-complete.cpp && \
+RUN ln -sf cluon-complete-v0.0.121.hpp cluon-complete.cpp && \
     g++ -std=c++14 -Wall -D HAVE_CLUON_LIVEFEED -pthread -s -static -static-libgcc -static-libstdc++ -o /tmp/cluon-livefeed cluon-complete.cpp
 
 RUN [ "cross-build-end" ]
