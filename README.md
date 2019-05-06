@@ -32,13 +32,13 @@ This microservice is created automatically on changes to this repository via Doc
 This microservice is supposed to be used in parallel with a running [OD4Sessions](https://github.com/chalmers-revere/opendlv) with other microservices that exchange messages in [`Envelope`](https://github.com/chrberger/libcluon/blob/master/libcluon/resources/cluonDataStructures.odvd#L23-L30) data format. The purpose of this microservice to display the type and timestamps of the currently exchanged messages on console. It can be used as shown in the following:
 
 ```
-docker run --rm -ti --init --net=host chrberger/cluon-livefeed-multi:v0.0.121a --cid=111
+docker run --rm -ti --init --net=host chrberger/cluon-livefeed-multi:v0.0.121 --cid=111
 ```
 
 Additionally, you can supply a message specification in `.odvd`-file like, for example, the [OpenDLV Standard Message Set](https://github.com/chalmers-revere/opendlv.standard-message-set/blob/master/opendlv.odvd) to dynamically resolve the data types of the exchanged messages. In the following, it is assumed that you have the `.odvd`-file named `example.odvd` residing in the current working directory: 
 
 ```
-docker run --rm -ti --init --net=host -v $PWD:/opt chrberger/cluon-livefeed-multi:v0.0.121a --cid=111 --odvd=/opt/example.odvd
+docker run --rm -ti --init --net=host -v $PWD:/opt chrberger/cluon-livefeed-multi:v0.0.121 --cid=111 --odvd=/opt/example.odvd
 ```
 
 ## License
