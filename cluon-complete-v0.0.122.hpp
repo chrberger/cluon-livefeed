@@ -1,6 +1,6 @@
 // This is an auto-generated header-only single-file distribution of libcluon.
-// Date: Sun, 03 Mar 2019 20:03:13 +0100
-// Version: 0.0.121
+// Date: Sat, 03 Aug 2019 15:58:53 +0200
+// Version: 0.0.122
 //
 //
 // Implementation of N4562 std::experimental::any (merged into C++17) for C++11 compilers.
@@ -23,6 +23,26 @@
 #include <typeinfo>
 #include <type_traits>
 #include <stdexcept>
+
+
+#if defined(PARTICLE)
+#if !defined(__cpp_exceptions) && !defined(ANY_IMPL_NO_EXCEPTIONS) && !defined(ANY_IMPL_EXCEPTIONS)
+#   define ANY_IMPL_NO_EXCEPTIONS
+# endif
+#else
+// you can opt-out of exceptions by definining ANY_IMPL_NO_EXCEPTIONS,
+// but you must ensure not to cast badly when passing an `any' object to any_cast<T>(any)
+#endif
+
+#if defined(PARTICLE)
+#if !defined(__cpp_rtti) && !defined(ANY_IMPL_NO_RTTI) && !defined(ANY_IMPL_RTTI)
+#   define ANY_IMPL_NO_RTTI
+# endif
+#else
+// you can opt-out of RTTI by defining ANY_IMPL_NO_RTTI,
+// in order to disable functions working with the typeid of a type
+#endif
+
 
 namespace linb
 {
@@ -131,11 +151,13 @@ public:
         return this->vtable == nullptr;
     }
 
+#ifndef ANY_IMPL_NO_RTTI
     /// If *this has a contained object of type T, typeid(T); otherwise typeid(void).
     const std::type_info& type() const noexcept
     {
         return empty()? typeid(void) : this->vtable->type();
     }
+#endif
 
     /// Exchange the states of *this and rhs.
     void swap(any& rhs) noexcept
@@ -149,7 +171,7 @@ public:
             if(this->vtable != nullptr)
             {
                 this->vtable->move(this->storage, rhs.storage);
-                //this->vtable = nullptr; -- uneeded, see below
+                //this->vtable = nullptr; -- unneeded, see below
             }
 
             // move from tmp (previously rhs) to *this.
@@ -183,8 +205,10 @@ private: // Storage and Virtual Method Table
         // Note: The caller is responssible for doing .vtable = nullptr after destructful operations
         // such as destroy() and/or move().
 
+#ifndef ANY_IMPL_NO_RTTI
         /// The type of the object this vtable is for.
         const std::type_info& (*type)() noexcept;
+#endif
 
         /// Destroys the object in the union.
         /// The state of the union after this call is unspecified, caller must ensure not to use src anymore.
@@ -206,10 +230,12 @@ private: // Storage and Virtual Method Table
     template<typename T>
     struct vtable_dynamic
     {
+#ifndef ANY_IMPL_NO_RTTI
         static const std::type_info& type() noexcept
         {
             return typeid(T);
         }
+#endif
 
         static void destroy(storage_union& storage) noexcept
         {
@@ -239,10 +265,12 @@ private: // Storage and Virtual Method Table
     template<typename T>
     struct vtable_stack
     {
+#ifndef ANY_IMPL_NO_RTTI
         static const std::type_info& type() noexcept
         {
             return typeid(T);
         }
+#endif
 
         static void destroy(storage_union& storage) noexcept
         {
@@ -275,7 +303,7 @@ private: // Storage and Virtual Method Table
     template<typename T>
     struct requires_allocation :
         std::integral_constant<bool,
-                !(std::is_nothrow_move_constructible<T>::value      // N4562 �6.3/3 [any.class]
+                !(std::is_nothrow_move_constructible<T>::value      // N4562 §6.3/3 [any.class]
                   && sizeof(T) <= sizeof(storage_union::stack)
                   && std::alignment_of<T>::value <= std::alignment_of<storage_union::stack_storage_t>::value)>
     {};
@@ -286,7 +314,10 @@ private: // Storage and Virtual Method Table
     {
         using VTableType = typename std::conditional<requires_allocation<T>::value, vtable_dynamic<T>, vtable_stack<T>>::type;
         static vtable_type table = {
-            VTableType::type, VTableType::destroy,
+#ifndef ANY_IMPL_NO_RTTI
+            VTableType::type,
+#endif
+            VTableType::destroy,
             VTableType::copy, VTableType::move,
             VTableType::swap,
         };
@@ -298,27 +329,6 @@ protected:
     friend const T* any_cast(const any* operand) noexcept;
     template<typename T>
     friend T* any_cast(any* operand) noexcept;
-
-    /// Same effect as is_same(this->type(), t);
-    bool is_typed(const std::type_info& t) const
-    {
-        return is_same(this->type(), t);
-    }
-
-    /// Checks if two type infos are the same.
-    ///
-    /// If ANY_IMPL_FAST_TYPE_INFO_COMPARE is defined, checks only the address of the
-    /// type infos, otherwise does an actual comparision. Checking addresses is
-    /// only a valid approach when there's no interaction with outside sources
-    /// (other shared libraries and such).
-    static bool is_same(const std::type_info& a, const std::type_info& b)
-    {
-#ifdef ANY_IMPL_FAST_TYPE_INFO_COMPARE
-        return &a == &b;
-#else
-        return a == b;
-#endif
-    }
 
     /// Casts (with no type_info checks) the storage pointer as const T*.
     template<typename T>
@@ -391,7 +401,9 @@ template<typename ValueType>
 inline ValueType any_cast(const any& operand)
 {
     auto p = any_cast<typename std::add_const<typename std::remove_reference<ValueType>::type>::type>(&operand);
+#ifndef ANY_IMPL_NO_EXCEPTIONS
     if(p == nullptr) throw bad_any_cast();
+#endif
     return *p;
 }
 
@@ -400,56 +412,55 @@ template<typename ValueType>
 inline ValueType any_cast(any& operand)
 {
     auto p = any_cast<typename std::remove_reference<ValueType>::type>(&operand);
+#ifndef ANY_IMPL_NO_EXCEPTIONS
     if(p == nullptr) throw bad_any_cast();
+#endif
     return *p;
 }
 
 ///
-/// If ANY_IMPL_ANYCAST_MOVEABLE is not defined, does as N4562 specifies:
-///     Performs *any_cast<remove_reference_t<ValueType>>(&operand), or throws bad_any_cast on failure.
-///
-/// If ANY_IMPL_ANYCAST_MOVEABLE is defined, does as LWG Defect 2509 specifies:
-///     If ValueType is MoveConstructible and isn't a lvalue reference, performs
-///     std::move(*any_cast<remove_reference_t<ValueType>>(&operand)), otherwise
-///     *any_cast<remove_reference_t<ValueType>>(&operand). Throws bad_any_cast on failure.
+/// If ValueType is MoveConstructible and isn't a lvalue reference, performs
+/// std::move(*any_cast<remove_reference_t<ValueType>>(&operand)), otherwise
+/// *any_cast<remove_reference_t<ValueType>>(&operand). Throws bad_any_cast on failure.
 ///
 template<typename ValueType>
 inline ValueType any_cast(any&& operand)
 {
-#ifdef ANY_IMPL_ANY_CAST_MOVEABLE
-    // https://cplusplus.github.io/LWG/lwg-active.html#2509
     using can_move = std::integral_constant<bool,
         std::is_move_constructible<ValueType>::value
         && !std::is_lvalue_reference<ValueType>::value>;
-#else
-    using can_move = std::false_type;
-#endif
 
     auto p = any_cast<typename std::remove_reference<ValueType>::type>(&operand);
+#ifndef ANY_IMPL_NO_EXCEPTIONS
     if(p == nullptr) throw bad_any_cast();
+#endif
     return detail::any_cast_move_if_true<ValueType>(p, can_move());
 }
 
 /// If operand != nullptr && operand->type() == typeid(ValueType), a pointer to the object
 /// contained by operand, otherwise nullptr.
-template<typename T>
-inline const T* any_cast(const any* operand) noexcept
+template<typename ValueType>
+inline const ValueType* any_cast(const any* operand) noexcept
 {
-    if(operand == nullptr || !operand->is_typed(typeid(T)))
-        return nullptr;
+    using T = typename std::decay<ValueType>::type;
+
+    if (operand && operand->vtable == any::vtable_for_type<T>())
+        return operand->cast<ValueType>();
     else
-        return operand->cast<T>();
+        return nullptr;
 }
 
 /// If operand != nullptr && operand->type() == typeid(ValueType), a pointer to the object
 /// contained by operand, otherwise nullptr.
-template<typename T>
-inline T* any_cast(any* operand) noexcept
+template<typename ValueType>
+inline ValueType* any_cast(any* operand) noexcept
 {
-    if(operand == nullptr || !operand->is_typed(typeid(T)))
-        return nullptr;
+    using T = typename std::decay<ValueType>::type;
+
+    if (operand && operand->vtable == any::vtable_for_type<T>())
+        return operand->cast<ValueType>();
     else
-        return operand->cast<T>();
+        return nullptr;
 }
 
 }
@@ -495,7 +506,7 @@ namespace std
 #define PEGLIB_NO_CONSTEXPR_SUPPORT
 #elif (_MSC_VER >= 1800)
 // good to go
-#else (_MSC_VER < 1800)
+#else //(_MSC_VER < 1800)
 #error "Requires C+11 support"
 #endif
 #endif
@@ -505,12 +516,6 @@ namespace std
 //#define PEGLIB_NO_UNICODE_CHARS
 
 namespace peg {
-
-#if __clang__ == 1 && __clang_major__ <= 5
-static void* enabler = nullptr; // workaround for Clang version <= 5.0.0
-#else
-extern void* enabler;
-#endif
 
 /*-----------------------------------------------------------------------------
  *  any
@@ -561,7 +566,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<!std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<!std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     T& get() {
         if (!content_) {
@@ -577,7 +582,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     T& get() {
         return *this;
@@ -585,7 +590,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<!std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<!std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     const T& get() const {
         assert(content_);
@@ -599,7 +604,7 @@ public:
 
     template <
         typename T,
-        typename std::enable_if<std::is_same<T, any>::value>::type*& = enabler
+        typename std::enable_if<std::is_same<T, any>::value, std::nullptr_t>::type = nullptr
     >
     const any& get() const {
         return *this;
@@ -919,6 +924,9 @@ struct SemanticValues : protected std::vector<any>
         return std::string(s_, n_);
     }
 
+    // Definition name
+    const std::string& name() const { return name_; }
+
     // Line number and column at which the matched string is
     std::pair<size_t, size_t> line_info() const {
         return peg::line_info(ss, s_);
@@ -983,6 +991,7 @@ private:
     size_t      n_;
     size_t      choice_count_;
     size_t      choice_;
+    std::string name_;
 
     template <typename F>
     auto transform(F f) const -> vector<typename std::remove_const<decltype(f(any()))>::type> {
@@ -1020,7 +1029,7 @@ private:
  */
 template <
     typename R, typename F,
-    typename std::enable_if<std::is_void<R>::value>::type*& = enabler,
+    typename std::enable_if<std::is_void<R>::value, std::nullptr_t>::type = nullptr,
     typename... Args>
 any call(F fn, Args&&... args) {
     fn(std::forward<Args>(args)...);
@@ -1029,7 +1038,7 @@ any call(F fn, Args&&... args) {
 
 template <
     typename R, typename F,
-    typename std::enable_if<std::is_same<typename std::remove_cv<R>::type, any>::value>::type*& = enabler,
+    typename std::enable_if<std::is_same<typename std::remove_cv<R>::type, any>::value, std::nullptr_t>::type = nullptr,
     typename... Args>
 any call(F fn, Args&&... args) {
     return fn(std::forward<Args>(args)...);
@@ -1039,7 +1048,7 @@ template <
     typename R, typename F,
     typename std::enable_if<
         !std::is_void<R>::value &&
-        !std::is_same<typename std::remove_cv<R>::type, any>::value>::type*& = enabler,
+        !std::is_same<typename std::remove_cv<R>::type, any>::value, std::nullptr_t>::type = nullptr,
     typename... Args>
 any call(F fn, Args&&... args) {
     return any(fn(std::forward<Args>(args)...));
@@ -1052,26 +1061,26 @@ public:
 
     Action(const Action& rhs) : fn_(rhs.fn_) {}
 
-    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     Action(F fn) : fn_(make_adaptor(fn, &F::operator())) {}
 
-    template <typename F, typename std::enable_if<std::is_pointer<F>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_pointer<F>::value, std::nullptr_t>::type = nullptr>
     Action(F fn) : fn_(make_adaptor(fn, fn)) {}
 
-    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     Action(F /*fn*/) {}
 
-    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<!std::is_pointer<F>::value && !std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     void operator=(F fn) {
         fn_ = make_adaptor(fn, &F::operator());
     }
 
-    template <typename F, typename std::enable_if<std::is_pointer<F>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_pointer<F>::value, std::nullptr_t>::type = nullptr>
     void operator=(F fn) {
         fn_ = make_adaptor(fn, fn);
     }
 
-    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value>::type*& = enabler>
+    template <typename F, typename std::enable_if<std::is_same<F, std::nullptr_t>::value, std::nullptr_t>::type = nullptr>
     void operator=(F /*fn*/) {}
 
     Action& operator=(const Action& rhs) = default;
@@ -1746,7 +1755,7 @@ public:
             return static_cast<size_t>(-1);
         }
 
-        char32_t cp;
+        char32_t cp = 0;
         auto len = decode_codepoint(s, n, cp);
 
         if (!ranges_.empty()) {
@@ -2114,8 +2123,6 @@ struct Ope::Visitor
 
 struct AssignIDToDefinition : public Ope::Visitor
 {
-    using Ope::Visitor::visit;
-
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
             op->accept(*this);
@@ -2147,8 +2154,6 @@ struct TokenChecker : public Ope::Visitor
 {
     TokenChecker() : has_token_boundary_(false), has_rule_(false) {}
 
-    using Ope::Visitor::visit;
-
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
             op->accept(*this);
@@ -2170,8 +2175,10 @@ struct TokenChecker : public Ope::Visitor
     void visit(Reference& ope) override;
     void visit(Whitespace& ope) override { ope.ope_->accept(*this); }
 
-    bool is_token() const {
-        return has_token_boundary_ || !has_rule_;
+    static bool is_token(Ope& ope) {
+        TokenChecker vis;
+        ope.accept(vis);
+        return vis.has_token_boundary_ || !vis.has_rule_;
     }
 
 private:
@@ -2182,8 +2189,6 @@ private:
 struct DetectLeftRecursion : public Ope::Visitor {
     DetectLeftRecursion(const std::string& name)
         : error_s(nullptr), name_(name), done_(false) {}
-
-    using Ope::Visitor::visit;
 
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
@@ -2239,8 +2244,6 @@ struct ReferenceChecker : public Ope::Visitor {
         const std::vector<std::string>& params)
         : grammar_(grammar), params_(params) {}
 
-    using Ope::Visitor::visit;
-
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
             op->accept(*this);
@@ -2279,8 +2282,6 @@ struct LinkReferences : public Ope::Visitor {
         const std::vector<std::string>& params)
         : grammar_(grammar), params_(params) {}
 
-    using Ope::Visitor::visit;
-
     void visit(Sequence& ope) override {
         for (auto op: ope.opes_) {
             op->accept(*this);
@@ -2315,8 +2316,6 @@ struct FindReference : public Ope::Visitor {
         const std::vector<std::shared_ptr<Ope>>& args,
         const std::vector<std::string>& params)
         : args_(args), params_(params) {}
-
-    using Ope::Visitor::visit;
 
     void visit(Sequence& ope) override {
         std::vector<std::shared_ptr<Ope>> opes;
@@ -2357,6 +2356,24 @@ struct FindReference : public Ope::Visitor {
 private:
     const std::vector<std::shared_ptr<Ope>>& args_;
     const std::vector<std::string>& params_;
+};
+
+struct IsPrioritizedChoice : public Ope::Visitor
+{
+    IsPrioritizedChoice() : is_prioritized_choice_(false) {}
+
+    void visit(PrioritizedChoice& /*ope*/) override {
+        is_prioritized_choice_ = true;
+    }
+
+    static bool is_prioritized_choice(Ope& ope) {
+        IsPrioritizedChoice vis;
+        ope.accept(vis);
+        return vis.is_prioritized_choice_;
+    }
+
+private:
+    bool is_prioritized_choice_;
 };
 
 /*
@@ -2509,9 +2526,7 @@ public:
 
     bool is_token() const {
         std::call_once(is_token_init_, [this]() {
-            TokenChecker vis;
-            get_core_operator()->accept(vis);
-            is_token_ = vis.is_token();
+            is_token_ = TokenChecker::is_token(*get_core_operator());
         });
         return is_token_;
     }
@@ -2650,8 +2665,7 @@ inline size_t Holder::parse(const char* s, size_t n, SemanticValues& sv, Context
     // Macro reference
     // TODO: need packrat support
     if (outer_->is_macro) {
-        const auto& rule = *ope_;
-        return rule.parse(s, n, sv, c, dt);
+        return ope_->parse(s, n, sv, c, dt);
     }
 
     size_t len;
@@ -2672,13 +2686,18 @@ inline size_t Holder::parse(const char* s, size_t n, SemanticValues& sv, Context
 
         auto& chldsv = c.push();
 
-        const auto& rule = *ope_;
-        len = rule.parse(s, n, chldsv, c, dt);
+        len = ope_->parse(s, n, chldsv, c, dt);
 
         // Invoke action
         if (success(len)) {
             chldsv.s_ = s;
             chldsv.n_ = len;
+            chldsv.name_ = outer_->name;
+
+            if (!IsPrioritizedChoice::is_prioritized_choice(*ope_)) {
+                chldsv.choice_count_ = 0;
+                chldsv.choice_ = 0;
+            }
 
             try {
                 a_val = reduce(chldsv, dt);
@@ -2831,6 +2850,9 @@ inline void DetectLeftRecursion::visit(Reference& ope) {
         refs_.insert(ope.name_);
         if (ope.rule_) {
             ope.rule_->accept(*this);
+            if (done_ == false) {
+                return;
+            }
         }
     }
     done_ = true;
@@ -3377,12 +3399,15 @@ template <typename Annotation>
 struct AstBase : public Annotation
 {
     AstBase(const char* a_path, size_t a_line, size_t a_column,
-            const char* a_name, size_t a_choice_count, size_t a_choice,
+            const char* a_name, size_t a_position, size_t a_length,
+            size_t a_choice_count, size_t a_choice,
             const std::vector<std::shared_ptr<AstBase>>& a_nodes)
         : path(a_path ? a_path : "")
         , line(a_line)
         , column(a_column)
         , name(a_name)
+        , position(a_position)
+        , length(a_length)
         , choice_count(a_choice_count)
         , choice(a_choice)
         , original_name(a_name)
@@ -3397,12 +3422,15 @@ struct AstBase : public Annotation
     {}
 
     AstBase(const char* a_path, size_t a_line, size_t a_column,
-            const char* a_name, size_t a_choice_count, size_t a_choice,
+            const char* a_name, size_t a_position, size_t a_length,
+            size_t a_choice_count, size_t a_choice,
             const std::string& a_token)
         : path(a_path ? a_path : "")
         , line(a_line)
         , column(a_column)
         , name(a_name)
+        , position(a_position)
+        , length(a_length)
         , choice_count(a_choice_count)
         , choice(a_choice)
         , original_name(a_name)
@@ -3417,11 +3445,14 @@ struct AstBase : public Annotation
     {}
 
     AstBase(const AstBase& ast, const char* a_original_name,
+            size_t a_position, size_t a_length,
             size_t a_original_choice_count, size_t a_original_choise)
         : path(ast.path)
         , line(ast.line)
         , column(ast.column)
         , name(ast.name)
+        , position(a_position)
+        , length(a_length)
         , choice_count(ast.choice_count)
         , choice(ast.choice)
         , original_name(a_original_name)
@@ -3442,6 +3473,8 @@ struct AstBase : public Annotation
     const size_t                      column;
 
     const std::string                 name;
+    size_t                            position;
+    size_t                            length;
     const size_t                      choice_count;
     const size_t                      choice;
     const std::string                 original_name;
@@ -3456,7 +3489,7 @@ struct AstBase : public Annotation
     const std::string                 token;
 
     std::vector<std::shared_ptr<AstBase<Annotation>>> nodes;
-    std::shared_ptr<AstBase<Annotation>>              parent;
+    std::weak_ptr<AstBase<Annotation>>                parent;
 };
 
 template <typename T>
@@ -3515,7 +3548,8 @@ struct AstOptimizer
         if (opt && original->nodes.size() == 1) {
             auto child = optimize(original->nodes[0], parent);
             return std::make_shared<T>(
-                *child, original->name.c_str(), original->choice_count, original->choice);
+                *child, original->name.c_str(), original->choice_count,
+                original->position, original->length, original->choice);
         }
 
         auto ast = std::make_shared<T>(*original);
@@ -3707,13 +3741,13 @@ public:
                     if (rule.is_token()) {
                         return std::make_shared<T>(
                             sv.path, line.first, line.second,
-                            name.c_str(), sv.choice_count(), sv.choice(),
+                            name.c_str(), std::distance(sv.ss, sv.c_str()), sv.length(), sv.choice_count(), sv.choice(),
                             sv.token());
                     }
 
                     auto ast = std::make_shared<T>(
                         sv.path, line.first, line.second,
-                        name.c_str(), sv.choice_count(), sv.choice(),
+                        name.c_str(), std::distance(sv.ss, sv.c_str()), sv.length(), sv.choice_count(), sv.choice(),
                         sv.transform<std::shared_ptr<T>>());
 
                     for (auto node: ast->nodes) {
@@ -5388,9 +5422,15 @@ inline std::vector<std::string> split(const std::string &str,
     if (i != prev) {
       retVal.emplace_back(str.substr(prev, i - prev));
     }
+    else {
+      retVal.emplace_back("");
+    }
   }
   if ((prev > 0) && (prev < str.size())) {
     retVal.emplace_back(str.substr(prev, str.size() - prev));
+  }
+  else if (prev > 0) {
+    retVal.emplace_back("");
   }
   return retVal;
 }
@@ -5465,7 +5505,7 @@ inline cluon::data::TimeStamp convert(const std::chrono::system_clock::time_poin
 }
 
 /**
- * @return TimeStamp of now.
+ * @return TimeStamp of now from std::chrono::system_clock.
  */
 inline cluon::data::TimeStamp now() noexcept {
     return convert(std::chrono::system_clock::now());
@@ -12037,7 +12077,7 @@ inline void FromMsgPackVisitor::visit(uint32_t id, std::string &&typeName, std::
 
 } // namespace cluon
 /*
- * Copyright (C) 2017-2018  Christian Berger
+ * Copyright (C) 2017-2019  Christian Berger
  *
  * This Source Code Form is subject to the terms of the Mozilla Public
  * License, v. 2.0. If a copy of the MPL was not distributed with this
@@ -12078,9 +12118,9 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
             if (m.size() > 0) {
                 std::string match{m[0]};
                 std::vector<std::string> retVal = stringtoolbox::split(match, ':');
-                if ((retVal.size() == 1) || ((retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() == 0))) {
+                if ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() == 0) ) {
                     std::string keyOfNestedObject{stringtoolbox::trim(retVal[0])};
-                    keyOfNestedObject = stringtoolbox::split(keyOfNestedObject, '"')[0];
+                    keyOfNestedObject = stringtoolbox::split(keyOfNestedObject, '"')[1];
                     {
                         std::string suffix(m.suffix());
                         suffix   = stringtoolbox::trim(suffix);
@@ -12097,11 +12137,11 @@ inline std::map<std::string, FromJSONVisitor::JSONKeyValue> FromJSONVisitor::rea
 
                     result[keyOfNestedObject] = kv;
                 }
-                if ((retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() > 0)) {
+                if ( (retVal.size() == 2) && (stringtoolbox::trim(retVal[1]).size() > 0) ) {
                     auto e = std::make_pair(stringtoolbox::trim(retVal[0]), stringtoolbox::trim(retVal[1]));
 
                     JSONKeyValue kv;
-                    kv.m_key = stringtoolbox::split(e.first, '"')[0];
+                    kv.m_key = stringtoolbox::split(e.first, '"')[1];
 
                     if ((e.second.size() > 0) && (e.second.at(0) == '"')) {
                         kv.m_type  = JSONConstants::STRING;
@@ -14767,14 +14807,16 @@ inline std::pair<bool, cluon::data::TimeStamp> SharedMemory::getTimeStamp() noex
 #ifndef WIN32
     if ((retVal = isLocked())) {
         struct stat fileStatus;
-        fstat(m_fdForTimeStamping, &fileStatus);
+        auto r = fstat(m_fdForTimeStamping, &fileStatus);
+        if (0 == r) {
 #ifdef __APPLE__
-        sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_sec))
-                       .microseconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_nsec/1000));
+            sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_sec))
+                           .microseconds(static_cast<int32_t>(fileStatus.st_mtimespec.tv_nsec/1000));
 #else
-        sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtim.tv_sec))
-                       .microseconds(static_cast<int32_t>(fileStatus.st_mtim.tv_nsec/1000));
+            sampleTimeStamp.seconds(static_cast<int32_t>(fileStatus.st_mtim.tv_sec))
+                           .microseconds(static_cast<int32_t>(fileStatus.st_mtim.tv_nsec/1000));
 #endif
+        }
     }
 #endif
 
@@ -17967,7 +18009,7 @@ inline int32_t cluon_rec2csv(int32_t argc, char **argv) {
                             // Extract timestamps.
                             std::vector<std::string> timeStampsWithHeader;
                             {
-                                // Skip senderStamp (as it is in file name) and serialzedData.
+                                // Skip senderStamp (as it is in file name) and serializedData.
                                 cluon::ToCSVVisitor csv(';', true, { {1,false}, {2,false}, {3,true}, {4,true}, {5,true}, {6,false} });
                                 env.accept(csv);
                                 timeStampsWithHeader = stringtoolbox::split(csv.csv(), '\n');

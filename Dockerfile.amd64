@@ -22,7 +22,7 @@ RUN apk update && \
         g++
 ADD . /opt/sources
 WORKDIR /opt/sources
-RUN ln -sf cluon-complete-v0.0.121.hpp cluon-complete.cpp && \
+RUN ln -sf cluon-complete-v0.0.122.hpp cluon-complete.cpp && \
     g++ -std=c++14 -Wall -D HAVE_CLUON_LIVEFEED -pthread -s -static -static-libgcc -static-libstdc++ -o /tmp/cluon-livefeed cluon-complete.cpp
 
 
