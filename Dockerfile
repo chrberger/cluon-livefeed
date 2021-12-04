@@ -1,4 +1,4 @@
-# Copyright (C) 2019  Christian Berger
+# Copyright (C) 2021  Christian Berger
 #
 # This program is free software: you can redistribute it and/or modify
 # it under the terms of the GNU General Public License as published by
@@ -14,15 +14,16 @@
 # along with this program.  If not, see <http://www.gnu.org/licenses/>.
 
 # Part to build cluon-livefeed.
-FROM alpine:3.7 as builder
+FROM alpine:3.15 as builder
 MAINTAINER Christian Berger "christian.berger@gu.se"
 
 RUN apk update && \
     apk --no-cache add \
-        g++
+        g++ \
+        linux-headers
 ADD . /opt/sources
 WORKDIR /opt/sources
-RUN ln -sf cluon-complete-v0.0.122.hpp cluon-complete.cpp && \
+RUN ln -sf cluon-complete-v0.0.140.hpp cluon-complete.cpp && \
     g++ -std=c++14 -Wall -D HAVE_CLUON_LIVEFEED -pthread -s -static -static-libgcc -static-libstdc++ -o /tmp/cluon-livefeed cluon-complete.cpp
 
 

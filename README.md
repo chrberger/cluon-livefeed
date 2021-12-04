@@ -2,7 +2,7 @@
 
 `cluon-livefeed` is a microservice for [libcluon](https://github.com/chrberger/libcluon)-based [OD4Sessions](https://github.com/chalmers-revere/opendlv) to display the currently exchanged messages in [`Envelope`](https://github.com/chrberger/libcluon/blob/master/libcluon/resources/cluonDataStructures.odvd#L23-L30) data format.
 
-[![License](https://img.shields.io/badge/license-GPL--3-blue.svg)](https://raw.githubusercontent.com/chrberger/libcluon/master/LICENSE) [![x86_64](https://img.shields.io/badge/platform-x86_64-blue.svg)](https://hub.docker.com/r/chrberger/cluon-livefeed-amd64/tags/) [![armhf](https://img.shields.io/badge/platform-armhf-blue.svg)](https://hub.docker.com/r/chrberger/cluon-livefeed-armhf/tags/) [![aarch64](https://img.shields.io/badge/platform-aarch64-blue.svg)](https://hub.docker.com/r/chrberger/cluon-livefeed-aarch64/tags/)  [![multi](https://img.shields.io/badge/platform-multi-blue.svg)](https://hub.docker.com/r/chrberger/cluon-livefeed-multi/tags/)
+[![License](https://img.shields.io/badge/license-GPL--3-blue.svg)](https://raw.githubusercontent.com/chrberger/libcluon/master/LICENSE)
 
 ## Table of Contents
 * [Features](#features)
@@ -24,21 +24,16 @@ project as it ships its dependencies as part of the source distribution:
 )](https://www.gnu.org/licenses/gpl-3.0.txt)
 
 ## Usage
-This microservice is created automatically on changes to this repository via Docker's public registry for:
-* [x86_64](https://hub.docker.com/r/chrberger/cluon-livefeed-amd64/tags/)
-* [armhf](https://hub.docker.com/r/chrberger/cluon-livefeed-armhf/tags/)
-* [aarch64](https://hub.docker.com/r/chrberger/cluon-livefeed-aarch64/tags/)
-
 This microservice is supposed to be used in parallel with a running [OD4Sessions](https://github.com/chalmers-revere/opendlv) with other microservices that exchange messages in [`Envelope`](https://github.com/chrberger/libcluon/blob/master/libcluon/resources/cluonDataStructures.odvd#L23-L30) data format. The purpose of this microservice to display the type and timestamps of the currently exchanged messages on console. It can be used as shown in the following:
 
 ```
-docker run --rm -ti --init --net=host chrberger/cluon-livefeed-multi:v0.0.122 --cid=111
+docker run --rm -ti --init --net=host ghcr.io/chrberger/cluon-livefeed:latest --cid=111
 ```
 
 Additionally, you can supply a message specification in `.odvd`-file like, for example, the [OpenDLV Standard Message Set](https://github.com/chalmers-revere/opendlv.standard-message-set/blob/master/opendlv.odvd) to dynamically resolve the data types of the exchanged messages. In the following, it is assumed that you have the `.odvd`-file named `example.odvd` residing in the current working directory: 
 
 ```
-docker run --rm -ti --init --net=host -v $PWD:/opt chrberger/cluon-livefeed-multi:v0.0.122 --cid=111 --odvd=/opt/example.odvd
+docker run --rm -ti --init --net=host -v $PWD:/opt ghcr.io/chrberger/cluon-livefeed:latest --cid=111 --odvd=/opt/example.odvd
 ```
 
 ## License
